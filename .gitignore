@@ -1,0 +1,30 @@
+# Fetched PDFs — large, and re-fetchable with `papers.py pdf <id>`
+.cache/
+
+# Vendored skills. skills-lock.json IS tracked; restore the content with:
+#   npx add-skill Astro-Han/karpathy-llm-wiki
+.agents/
+.claude/skills/karpathy-llm-wiki
+
+# Obsidian per-machine UI state (window layout, hotkeys)
+.obsidian/
+
+# LaTeX build artifacts — regenerable from .tex + refs.bib
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+
+# Compiled documents. To archive a submitted version: git add -f <file>.pdf
+*.pdf
+
+__pycache__/
+*.pyc
+.DS_Store

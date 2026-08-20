@@ -1,0 +1,225 @@
+\documentclass[aspectratio=169]{beamer}
+\usepackage[numbers]{natbib}
+\usepackage{booktabs}
+
+\usetheme{default}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+\setbeamercolor{frametitle}{fg=black}
+\setbeamerfont{frametitle}{series=\bfseries}
+\setbeamertemplate{itemize items}[circle]
+
+% natbib inside beamer: keep citations unobtrusive
+\setbeamercolor{bibliography entry author}{fg=black}
+\renewcommand{\bibsection}{}
+
+\title{Where LLM Agents Break}
+\subtitle{A literature review of the reason--act loop and its failure modes}
+\author{}
+\date{}
+
+\begin{document}
+
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+\begin{frame}{The claim of this review}
+  \begin{itemize}
+    \item Three papers define the modern LLM agent: an architecture, a
+      self-improvement mechanism, and an evaluation.
+    \item Read together, they do \emph{not} describe steady progress.
+    \item They describe a paradigm whose two central failures have no
+      principled fix, and a metric showing the real bottleneck is
+      \textbf{consistency}, not capability.
+    \item[]
+    \item \textbf{Thesis:} the field improves peak ability while the binding
+      constraint is variance, and no method recovers a trajectory once it
+      derails.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{The architecture: interleave thought and action}
+  ReAct \citep{yao2023reactsynergizingreasoningacting} augments the action space
+  to $\hat{A} = A \cup L$. A \emph{thought} is an action in language space that
+  ``does not affect the external environment, thus leading to no observation
+  feedback'' --- it only updates context.
+
+  \vspace{1em}
+  Motivation: chain-of-thought is ``a static black box, in that the model uses
+  its own internal representations to generate thoughts and is not grounded in
+  the external world.''
+
+  \vspace{1em}
+  Frozen PaLM-540B, 1--6 in-context examples. No training.
+\end{frame}
+
+\begin{frame}{Grounding works --- and costs something}
+  \begin{center}
+  \begin{tabular}{lrr}
+    \toprule
+    Judged failure mode & ReAct & CoT \\
+    \midrule
+    Hallucination        & 0\%  & 56\% \\
+    False positive       & 6\%  & 14\% \\
+    Reasoning error      & 47\% & 16\% \\
+    Search result error  & 23\% & --- \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+
+  \vspace{0.8em}
+  Hallucination is eliminated. Reasoning errors nearly triple, because ``such a
+  structural constraint also reduces its flexibility in formulating reasoning
+  steps.''
+
+  \vspace{0.5em}
+  Net effect on HotpotQA: ReAct \textbf{27.4} vs CoT \textbf{29.4} exact match
+  --- the paradigm \emph{loses}. It wins on FEVER, 60.9 vs 56.3.
+\end{frame}
+
+\begin{frame}{The two failures with no principled fix}
+  \begin{itemize}
+    \item \textbf{Loop entrapment.} ``the model repetitively generates the
+      previous thoughts and actions'' and cannot break out. Folded into the 47\%
+      reasoning-error bucket, so its own rate was never reported. Attributed to
+      greedy decoding --- untested.
+    \item \textbf{Unrecoverable retrieval failure.} 23\% of errors. The damage is
+      not bad retrieval but the absence of any backtracking mechanism.
+  \end{itemize}
+
+  \vspace{1em}
+  Both are made terminal by a hard step budget (7 steps HotpotQA, 5 FEVER) plus
+  the finding that ``more steps will not improve ReAct performance.''
+
+  \vspace{0.5em}
+  \textbf{More compute does not help. Only trajectory recovery would.}
+\end{frame}
+
+\begin{frame}{The mechanism: learn without weights}
+  Reflexion \citep{shinn2023reflexionlanguageagentsverbal} reinforces agents
+  ``not by updating weights, but instead through linguistic feedback.'' A failed
+  trial becomes a verbal summary in episodic memory, prepended to the next
+  attempt.
+
+  \vspace{1em}
+  Results are strong: \textbf{130 of 134} ALFWorld tasks; \textbf{91\%} pass@1 on
+  HumanEval against a reported \textbf{80\%} for GPT-4.
+
+  \vspace{1em}
+  Baseline ReAct plateaus --- performance ``halts between trials 6 and 7,''
+  converging at a 22\% hallucination rate ``with no signs of long-term
+  recovery.''
+\end{frame}
+
+\begin{frame}{But the mechanism is thinner than the framing}
+  \begin{itemize}
+    \item \textbf{The trigger is an \texttt{if} statement.} Reflection fires when
+      the agent repeats an action ``more than 3 cycles,'' or ``exceeds 30''
+      actions. Two unablated constants, tuned to one domain --- and this is a
+      \emph{loop detector}, i.e.\ a hardcoded patch for ReAct's signature bug.
+    \item \textbf{``Long-term memory'' holds three entries.} $\Omega$ is
+      ``usually set to 1-3,'' truncated to ``the last 3 self-reflections'' to fit
+      the context window --- yet learning is reported over 12 trials.
+    \item \textbf{Reflection can entrench a wrong diagnosis.} Acknowledged: it
+      ``may still succumb to non-optimal local minima solutions.'' Nothing
+      detects a bad reflection.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{The unstated scope limit}
+  The loop requires ``reset the environment, and start a new trial.''
+
+  \vspace{1em}
+  Every reported gain depends on retrying from a clean state. That silently
+  excludes:
+  \begin{itemize}
+    \item irreversible actions --- a sent message, a payment, a physical movement
+    \item tasks with no machine-checkable success signal
+  \end{itemize}
+
+  \vspace{1em}
+  Neither appears in the paper's Limitations section. Together they rule out most
+  settings agents are actually being deployed into.
+\end{frame}
+
+\begin{frame}{The evaluation: measure consistency, not peak}
+  $\tau$-bench \citep{yao2024taubenchbenchmarktoolagentuserinteraction} proposes
+  \textbf{pass$^k$} --- ``the chance that all $k$ i.i.d.\ task trials are
+  successful.'' The deliberate inverse of pass@$k$, ``the chance that at least
+  one out of $k$ \dots\ is successful.''
+
+  \vspace{1em}
+  \begin{center}
+  \begin{tabular}{lr}
+    \toprule
+    gpt-4o, function calling & success \\
+    \midrule
+    pass$^1$ & $< 50\%$ \\
+    pass$^8$ (retail) & $< 25\%$ \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+
+  \vspace{0.8em}
+  An agent that can usually do a task often cannot do it \emph{eight times
+  running}. Averaged single-run benchmarks cannot see this at all.
+\end{frame}
+
+\begin{frame}{And the benchmark grades itself generously}
+  Reward is terminal-state only: the final database must be ``identical to the
+  unique ground truth outcome database.''
+
+  \vspace{1em}
+  The authors state the consequence plainly:
+
+  \begin{quote}
+    ``$r = 1$ might be a necessary but not sufficient condition for a successful
+    episode e.g., the agent might issue the return without explicit user
+    confirmation, which violates the policy.''
+  \end{quote}
+
+  \vspace{0.5em}
+  A policy-violating trajectory can score 1. So $< 50\%$ is an \textbf{upper
+  bound} on compliance --- the true numbers are worse.
+\end{frame}
+
+\begin{frame}{Recurring failures, not per-paper flaws}
+  \begin{itemize}
+    \item \textbf{Load-bearing magic numbers.} ReAct: backoff at 7/5 steps, vote
+      threshold $n/2$. Reflexion: 3 cycles, 30 actions. All hand-set, none
+      ablated.
+    \item \textbf{Nothing recovers within a trajectory.} Two options exist:
+      continue and fail, or discard the episode and restart. Mid-trajectory
+      repair appears in none of the three.
+    \item \textbf{Measurement flatters the method.} ReAct: 29\% label ambiguity
+      against a 2-point gap. Reflexion: 91\% vs 80\% compares multi-trial to
+      single-shot. $\tau$-bench: reward passes policy violations.
+    \item \textbf{Retry/oracle assumptions exclude deployment.} Methods are built
+      where retries are free; reliability is measured where they are not.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Where the openings are}
+  \begin{enumerate}
+    \item \textbf{Trajectory-aware reward for $\tau$-bench.} Check policy
+      compliance along the path, not just the terminal database state. Motivated
+      by the authors' own admission; would tighten every number in the paper.
+      \emph{Best-scoped entry point.}
+    \item \textbf{Self-assessed reflection triggers.} Does Reflexion's gain
+      survive when the agent decides for itself when to reflect? Never tested.
+    \item \textbf{Mid-trajectory recovery.} Backtracking over the
+      thought--action trace. The largest structural gap, and the most likely to
+      generalize.
+    \item \textbf{Separate agent variance from user-simulator variance.}
+      $\tau$-bench does not; without that split, it is unclear how much of the
+      pass$^8$ collapse is even the agent's fault.
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}[allowframebreaks]{References}
+  \bibliographystyle{plainnat}
+  \bibliography{../../refs}
+\end{frame}
+
+\end{document}
