@@ -64,13 +64,16 @@ def arxiv_query(query):
     return " AND ".join(f"all:{t}" for t in q.split())
 
 
-def arxiv_search(query, limit):
+def arxiv_search(query, limit, recent=False):
     q = urllib.parse.urlencode({"search_query": arxiv_query(query), "start": 0,
-                                "max_results": limit, "sortBy": "relevance"})
+                                "max_results": limit,
+                                "sortBy": "submittedDate" if recent else "relevance"})
     return parse_arxiv(get(f"http://export.arxiv.org/api/query?{q}"))
 
 
-def s2_search(query, limit):
+# ponytail: `recent` is accepted and ignored — this S2 endpoint has no date sort.
+# Keeps search()'s dispatch loop a single uniform call.
+def s2_search(query, limit, recent=False):
     q = urllib.parse.urlencode({
         "query": query, "limit": limit,
         "fields": "title,authors,year,abstract,citationCount,externalIds,url",
@@ -101,12 +104,12 @@ def norm(title):
     return re.sub(r"[^a-z0-9]", "", title.lower())
 
 
-def search(query, limit):
+def search(query, limit, recent=False):
     """Merge both sources, preferring whichever record carries a citation count."""
     merged = {}
     for fetch in (arxiv_search, s2_search):
         try:
-            hits = fetch(query, limit)
+            hits = fetch(query, limit, recent)
         except Exception as e:  # one dead API must not kill the search
             print(f"# {fetch.__name__} unavailable: {e}", file=sys.stderr)
             continue
@@ -115,7 +118,11 @@ def search(query, limit):
             if k and (k not in merged or merged[k]["citations"] is None):
                 merged[k] = p
     hits = list(merged.values())
-    hits.sort(key=lambda p: (p["citations"] is None, -(p["citations"] or 0)))
+    # Citation-count ranking is exactly wrong for a recency search: a paper from
+    # last month has no citations yet and would sort to the bottom. arXiv already
+    # returned newest-first, and dict insertion preserved it, so leave it alone.
+    if not recent:
+        hits.sort(key=lambda p: (p["citations"] is None, -(p["citations"] or 0)))
     return hits[:limit]
 
 
@@ -193,6 +200,8 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("search"); s.add_argument("query"); s.add_argument("-n", type=int, default=10)
     s.add_argument("--json", action="store_true")
+    s.add_argument("--recent", action="store_true",
+                   help="sort arXiv newest-first instead of by relevance")
     b = sub.add_parser("bib"); b.add_argument("ident")
     b.add_argument("--stdout", action="store_true", help="print instead of appending to refs.bib")
     d = sub.add_parser("pdf"); d.add_argument("ident")
@@ -200,7 +209,7 @@ def main():
     a = ap.parse_args()
 
     if a.cmd == "search":
-        hits = search(a.query, a.n)
+        hits = search(a.query, a.n, a.recent)
         print(json.dumps(hits, indent=2)) if a.json else fmt(hits)
     elif a.cmd == "bib":
         entry = bibtex(a.ident)
