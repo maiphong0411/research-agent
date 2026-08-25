@@ -1,0 +1,761 @@
+\documentclass[10pt,twocolumn,a4paper]{article}
+
+\usepackage[margin=0.85in,columnsep=0.28in]{geometry}
+\usepackage[numbers]{natbib}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{microtype}
+\usepackage{url}
+\usepackage[colorlinks=true,allcolors=blue]{hyperref}
+
+\newcommand{\ebar}{\bar{\epsilon}}
+
+\title{Measuring Agents by Their Trajectories:\\
+Process Supervision and Its Verifier Dependency}
+
+\author{Literature review}
+\date{August 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Language-model agents have become markedly better at completing multi-step tasks
+without becoming better at establishing whether they completed them.
+The dominant response across 2026 is to replace a single terminal reward with dense,
+step-level signal, in both training and evaluation.
+We review that turn across eighteen 2026 papers, anchored on three earlier works that set
+the agenda, and argue three things.
+First, the case against outcome-only measurement is no longer an inference but a quantity:
+re-scoring three computer-use benchmarks with a purpose-built rubric verifier moves reported
+success from $74.6\%$ to $37.9\%$ on one, with comparable gaps on every benchmark--agent pair
+tested \citep{rosset2026artbuildingverifierscomputer}.
+Second, dense supervision is conditional rather than free: a verifier with high
+disagreement is measurably worse than no process signal at all, in-domain and
+out-of-domain \citep{yuan2026verifiableprocessrewardsagentic}, and in multi-agent settings
+process verification does not reliably help
+\citep{venkataramani2026masproveunderstandingprocessverification}.
+Third, and cutting across the rest, agent interventions move the quantity being measured
+more reliably than the quantity being wanted --- a dense tool-use reward raises tool
+adoption from $0.03$ to $0.33$ with no held-out accuracy gain
+\citep{fan2026screenshotstoolselicitingtool}, self-evolution raises utility and
+unauthorized state changes together \citep{li2026auditingselfevolutionfinancialagents}, and
+self-authored skills score $8$--$11$ points \emph{below} using no skill
+\citep{peng2026writeexecuterefineskill}.
+We close with four scoped experiments that this corpus states or implies are missing, the
+most consequential being to measure verifier disagreement on a realistic agentic task and
+locate the threshold at which process supervision becomes harmful.
+\end{abstract}
+
+\section{Introduction}
+
+A frontier language model now solves in a single forward pass problems that were recent
+research contributions.
+Embedded in an agent loop and asked to carry a task over many steps, the same model
+fails in ways no single-step benchmark reveals.
+\citet{chen2026horizongapplanningmemory} name this the \emph{horizon gap}: ``the distance
+between what a model can do in one step and what a system built around it can reliably
+finish over many'', with characteristic failures being ``losing track of an earlier
+decision, declaring a half-finished job done, or quietly drifting from the goal they were
+given.''
+
+Two of those three failures are failures of self-assessment rather than of capability.
+An agent that declares a half-finished job done has not run out of ability; it has run out
+of the means to check.
+This review takes that observation as its organizing thread, because it is also the shape
+of the field's dominant 2026 research programme.
+
+The programme has a common diagnosis, stated in near-identical language across
+otherwise unrelated papers.
+Outcome-only credit assignment gives ``the same credit to effective elicitation, errors,
+and later repair'' \citep{zhao2026betteragentsmultiturnuser}; a trajectory ``may fail
+despite containing many correct intermediate decisions, or succeed despite containing
+flawed ones'' \citep{yuan2026verifiableprocessrewardsagentic}; most benchmarks ``judge only
+final outcomes, unable to distinguish reliable reasoning from lucky success''
+\citep{wu2026clawtracktracelevelevaluationimprovement}.
+The proposed cure is uniformly the same: manufacture denser signal at the level of the
+step or the trajectory segment.
+
+The interesting finding of the past year is not that the cure works.
+It is that the cure is \emph{conditional}, and that its precondition --- a verifier good
+enough to be worth listening to --- is the quantity nobody measures.
+
+\paragraph{Contributions.}
+This review makes four.
+(i) We separate three properties the literature routinely conflates, following
+\citet{chen2026horizongapplanningmemory}, and use the distinction as the spine of the
+review (\S\ref{sec:terms}).
+(ii) We consolidate the evidence that outcome-only measurement systematically overstates
+agent success, and characterise the four distinct mechanisms by which it does so
+(\S\ref{sec:outcome}).
+(iii) We organise the process-supervision literature by \emph{where its dense signal comes
+from} rather than by method family, which makes the shared verifier dependency visible
+(\S\S\ref{sec:process}--\ref{sec:condition}).
+(iv) We identify a cross-cutting pathology that no single paper in the corpus names ---
+interventions reliably move the measured quantity and unreliably move the intended one ---
+and derive a research agenda from what the corpus states is missing
+(\S\S\ref{sec:pathology}--\ref{sec:agenda}).
+
+\section{Scope and Method}
+\label{sec:scope}
+
+This is a focused review, not a systematic one, and the selection procedure matters for
+how its conclusions should be read.
+
+\paragraph{Corpus.}
+We reviewed eighteen papers posted to arXiv in 2026, selected by searching eight query
+threads spanning process rewards, trajectory verification, mid-trajectory recovery,
+long-horizon memory, agentic reinforcement learning, computer-use agents, deep-research
+agents, and reliability measurement, then filtering to 2025-or-later and ranking by
+relevance to five weaknesses already identified in earlier reading.
+Three earlier works anchor the discussion because they set the terms the 2026 papers
+respond to: ReAct \citep{yao2023reactsynergizingreasoningacting}, Reflexion
+\citep{shinn2023reflexionlanguageagentsverbal}, and $\tau$-bench
+\citep{yao2024taubenchbenchmarktoolagentuserinteraction}.
+
+\paragraph{Reading depth.}
+Seven of the eighteen were read in full; eleven at abstract depth, used only for claims
+their abstracts state directly and never for numbers requiring a table, and flagged as such
+at first substantive use.
+
+\paragraph{Secondary citations.}
+\citet{chen2026horizongapplanningmemory} is a survey of 1{,}547 papers, and several
+striking figures in \S\ref{sec:outcome} and \S\ref{sec:repair} reach us through it rather
+than from the primary source: the SWE-bench audits, the Vending-Bench coherence results,
+the AndroidControl noise ceiling, and the accuracy--correction paradox.
+We attribute these to the survey and do not treat them as independently verified; a reader
+building on any should read the primary paper first.
+A review that launders secondary citations into apparent primary evidence commits a smaller
+version of the error this review is about.
+
+\paragraph{What we do not cover.}
+Planning, orchestration topologies, GUI grounding, and agent safety are touched only where
+they bear on measurement; \citet{chen2026horizongapplanningmemory} covers the full pipeline
+at survey scale.
+
+\section{Three Properties, Routinely Conflated}
+\label{sec:terms}
+
+\citet{chen2026horizongapplanningmemory} open by fixing vocabulary, and the distinction is
+load-bearing enough to restate.
+Three properties are logically independent:
+
+\begin{itemize}
+\item \textbf{Long-context} is a property of the \emph{model}: how many tokens one forward
+      pass can attend to.
+\item \textbf{Long-horizon} is a property of the \emph{task}: how many sequential decisions
+      it requires, regardless of whether the resulting trace fits in a context window.
+\item \textbf{Long-term memory} is a property of the \emph{system}: whether information
+      available at step $t$ remains available at step $t+k$.
+\end{itemize}
+
+The independence is not pedantic: ``a harness can carry a long-horizon task through a
+short context via aggressive summarization, and a system can have a huge context window
+and no persistent memory at all''
+\citep{chen2026horizongapplanningmemory}.
+The cost of conflating them is that ``a `memory' paper and a `long-context' paper are so
+often cited as if they addressed the same problem when they do not.''
+
+Two further distinctions recur below.
+The \textbf{agent} is the policy --- the model plus whatever turns its output into actions
+--- while the \textbf{harness} is the surrounding software: control loop, tool sandbox,
+memory layer, retry logic, sub-agent orchestration.
+An \textbf{episode} is one complete attempt at a task; a \textbf{session} is a continuous
+interactive period bounded by the interface rather than the task, so a session may contain
+many episodes and an episode may span sessions.
+
+The agent/harness split is where this review's most uncomfortable open question lives
+(\S\ref{sec:agenda}).
+Relatedly, the locus at which extra horizon is carried determines the failure mode:
+within-context methods fail by attention degradation, methods exceeding the window inside
+one episode fail by ``information loss at the harness boundary'', and methods persisting
+across episodes fail by ``interference or staleness in what was retained''
+\citep{chen2026horizongapplanningmemory} --- so treating memory as one bucket obscures three
+unrelated mechanisms.
+
+\section{What Outcome-Only Measurement Hides}
+\label{sec:outcome}
+
+\subsection{The admission that started it}
+
+\citet{yao2024taubenchbenchmarktoolagentuserinteraction} introduced $\mathrm{pass}^k$, ``the
+chance that all $k$ i.i.d. task trials are successful'', reporting ``$<50\%$'' at
+$\mathrm{pass}^1$ and ``$\mathrm{pass}^8 < 25\%$'' on retail.
+More consequentially, they stated the limitation of their own terminal-state reward:
+``$r = 1$ might be a necessary but not sufficient condition for a successful episode e.g.,
+the agent might issue the return without explicit user confirmation, which violates the
+policy.''
+A trajectory can violate the domain policy and still score $1$.
+
+That was an inference about one benchmark.
+It is now a measured, cross-benchmark quantity.
+
+\subsection{The size of the gap}
+
+\citet{rosset2026artbuildingverifierscomputer} built a rubric-based verifier for
+computer-use trajectories --- approximately $3{,}000$ lines of code and $2{,}000$ lines of
+prompts, hand-iterated --- and re-scored three benchmarks with it.
+Table~\ref{tab:gap} reports the result.
+
+\begin{table}[t]
+\centering
+\begin{tabular}{@{}llrr@{}}
+\toprule
+Benchmark & Agent & Native & Rubric \\
+\midrule
+WebVoyager        & Fara-7B & $74.6$ & $37.9$ \\
+WebVoyager        & GPT-5   & $90.6$ & $71.0$ \\
+Online-Mind2Web   & Fara-7B & $32.2$ & $15.8$ \\
+Online-Mind2Web   & GPT-5   & $62.0$ & $48.6$ \\
+WebTailBench      & Fara-7B & $39.6$ & $23.2$ \\
+WebTailBench      & GPT-5   & $62.5$ & $39.9$ \\
+\bottomrule
+\end{tabular}
+\caption{Reported success rate (\%) under each benchmark's own (\emph{native}) verifier
+versus the \emph{rubric} verifier's outcome judgement, from
+\citet{rosset2026artbuildingverifierscomputer}.
+False positive rates of native verifiers against the rubric verifier exceed $20\%$ on
+every pair.
+The rubric verifier is treated as the reference label, so these are disagreements rather
+than proven errors --- see the caveat in \S\ref{sec:calib}.}
+\label{tab:gap}
+\end{table}
+
+Reaching those numbers required solving the verification problem well enough to be
+credible, and the paper is candid that this is hard.
+Its best outcome agreement with human labels is Cohen's $\kappa$ of $0.64$ and $0.58$ on
+two datasets, against baselines at $0.44$/$0.26$ and $0.31$/$0.13$, and against human
+inter-annotator agreement of $0.53$--$0.57$.
+The prior bound it cites is that ``no LLM-based judge exceeds $70\%$ precision'' against
+human agreement of $89.3\%$.
+Best-in-class verification is therefore roughly as good as humans who agree with each
+other poorly.
+
+\subsection{Four distinct mechanisms}
+
+The corpus supports separating four ways outcome-only measurement misleads, which are
+usually run together under ``benchmarks are flawed''.
+
+\paragraph{(1) Leniency.}
+The classic case: the check passes on trajectories that should fail.
+As reported by \citet{chen2026horizongapplanningmemory}, an audit of SWE-bench found
+$32.67\%$ of successful patches involved solution leakage and a further $31.08\%$ passed only
+because the test suite was too weak to verify correctness --- filtering both dropped one
+leaderboard-topping system from $12.47\%$ to $3.97\%$.
+Across agentic benchmarks generally, setup and reward-design flaws ``can over- or
+under-estimate reported performance by up to'' $100\%$ ``in relative terms''.
+
+\paragraph{(2) Noise as a ceiling.}
+The inverse failure, and less discussed.
+Top-scoring GUI agents ``plateau around'' $60\%$ on AndroidControl ``because benchmark
+noise --- ambiguities and factual errors in the benchmark itself --- caps the achievable
+score'' \citep{chen2026horizongapplanningmemory}.
+This has a three-year-old precedent: \citet{yao2023reactsynergizingreasoningacting} report
+label ambiguity at $29\%$ of judged cases against an exact-match gap to chain-of-thought of
+$27.4$ versus $29.4$, placing the headline comparison inside annotation noise.
+
+\paragraph{(3) Harness artifacts.}
+The most alarming instance we found is not about agents at all.
+Auditing three self-evolution methods,
+\citet{li2026auditingselfevolutionfinancialagents} found that one carried a literal
+WebArena text-action envelope that disrupted tool execution in their function-calling
+executor.
+Removing only that envelope moved utility from $0.319$ to $0.756$.
+A $43$-point swing from a prompt-format mismatch is larger than any effect that study was
+designed to measure, and it means cross-harness comparisons of these methods may be
+measuring envelope compatibility.
+The paper's conclusion --- that auditing requires tracking ``artifact-executor
+compatibility'' --- generalises beyond its domain.
+
+\paragraph{(4) Whether the run finished.}
+\citet{khanal2026pass1reliabilityscienceframework} argue that completion rate should be
+``a first-class validity metric'', having lost $368$ episodes between $23{,}760$ planned and
+$23{,}392$ completed ``after deduplication'' without stating what was removed.
+\citet{rosset2026artbuildingverifierscomputer} report $17.0\%$ unterminated trajectories
+for one agent on WebTailBench and $7.2\%$ for another on Online-Mind2Web, with no statement
+of how they count toward reported success.
+A $17\%$ unaccounted slice is larger than several of the disagreements being interpreted in
+the same table.
+
+\subsection{The gap is real but uncalibrated}
+\label{sec:calib}
+
+Two facts prevent Table~\ref{tab:gap} from being an estimate of overstatement.
+The rubric verifier is the reference label with its own human agreement at
+$\kappa \approx 0.6$; and its near-zero false positive rate ($0.01$, $0.08$) is an
+optimisation constraint rather than a discovery --- the objective was to ``maximize Cohen's
+$\kappa$ without increasing FPR; any FPR-increasing change is automatically rolled back'' ---
+with a corresponding false \emph{negative} rate of $0.31$--$0.32$.
+A verifier tuned never to over-credit under-reports success, the same direction that makes
+native verifiers look loose.
+Benchmark verifiers are \emph{loose} by an amount this literature has not calibrated.
+
+\section{The Turn to Process Supervision}
+\label{sec:process}
+
+\subsection{Organising by signal source, not method family}
+
+Process-reward papers are conventionally grouped by algorithm.
+Grouping them by \emph{where the dense signal originates} is more informative, because it
+exposes what each one needs from its environment.
+Table~\ref{tab:sources} does this for the corpus.
+
+\begin{table*}[t]
+\centering
+\begin{tabular}{@{}p{4.1cm}p{3.6cm}p{5.6cm}l@{}}
+\toprule
+Signal source & Instance & Requires & Depth \\
+\midrule
+Symbolic/algorithmic oracle & VPR \citep{yuan2026verifiableprocessrewardsagentic}
+  & a solver or search per environment & full \\
+Human step annotation & AgentProcessBench \citep{fan2026agentprocessbenchdiagnosingsteplevelprocess}
+  & per-step human labels & full \\
+Rubric + judge over screenshots & Universal Verifier \citep{rosset2026artbuildingverifierscomputer}
+  & rubric generation, judge model & full \\
+Rubric over reasoning turns & ClawTrack \citep{wu2026clawtracktracelevelevaluationimprovement}
+  & task-specific rubric items & abstract \\
+Environment's next reaction & Faca \citep{zhao2026betteragentsmultiturnuser}
+  & an instrumented simulator & full \\
+Privileged self-teacher & CrEST \citep{wang2026teachmagnitudedirectionverifierbounded}
+  & a stronger view of the same policy & abstract \\
+Policy's own belief consistency & ReBel \citep{tang2026rewardingbeliefsactionsconsistencyguided}
+  & nothing external & abstract \\
+\bottomrule
+\end{tabular}
+\caption{Sources of dense step-level signal in the reviewed corpus, ordered by decreasing
+external requirement.
+``Depth'' records whether we read the paper in full or at abstract depth
+(\S\ref{sec:scope}).
+The trend down the table is the story: each row buys density at lower external cost, and
+no paper establishes where signal quality falls off.}
+\label{tab:sources}
+\end{table*}
+
+\subsection{The strongest positive result}
+
+\citet{zhao2026betteragentsmultiturnuser} give the cleanest demonstration that dense credit
+beats terminal credit, and the reason is experimental design rather than effect size.
+Their control shares the frozen simulator, the agent-visible dialogue, the supervised
+initialisation, the training data, the rollout construction, the optimiser, and the
+horizon; credit assignment is the only difference.
+Under that control the nine-domain $\tau$-family average moves from
+$34.66 \pm 0.25$ to $40.57 \pm 1.04$ at 8B and from $42.51 \pm 0.12$ to
+$52.73 \pm 1.53$ at 14B, with the ordering holding across three training seeds at both
+scales.
+
+Two qualifications matter.
+The gains concentrate sharply --- at 14B, two of nine cells move from $26.3$ to $83.6$ and
+from $50.6$ to $82.7$ --- and the signal is the simulator's \emph{private} strategy label,
+which real users do not emit, so the deployable variant is explicitly future work.
+The polarity map moreover ``describe[s] interaction movement rather than user sentiment or
+action correctness'', so a policy-violating action a satisfied user confirms receives
+positive credit.
+$\tau$-bench's complaint was that terminal reward cannot see policy compliance; this adds
+dense credit that also cannot.
+
+\subsection{The label schema is where the gaps are}
+
+\citet{fan2026agentprocessbenchdiagnosingsteplevelprocess} contribute the first
+human-annotated step-level benchmark for tool-using agents: $1{,}000$ trajectories over
+$200$ unique tasks, $8{,}509$ annotated actions, inter-annotator agreement $89.1\%$ and
+Cohen's $\kappa$ of $0.767$, with ternary labels and an error-propagation rule marking
+everything causally downstream of a mistake as incorrect.
+
+Three structural observations follow, in rising order of consequence.
+
+First, the neutral label --- introduced precisely so exploratory steps are not punished ---
+is a small share of steps and the hardest class to predict, so under a micro-averaged
+step-accuracy metric a model that never predicts it forfeits almost nothing.
+The headline ranking is close to blind to the property the benchmark was built to measure.
+
+Second, the annotation protocol moves results more than the model does.
+Removing error propagation changes downstream Best-of-8 accuracy by $+3.7$ for one
+evaluator and by $-13.2$ for a \emph{variant of the same model} ($64.2$ to $50.9$).
+Anything built on this benchmark inherits a protocol choice whose effect size rivals the
+thing being measured.
+
+Third, and most attackable: irreversibility motivates the benchmark and appears nowhere in
+it.
+The paper opens on the claim that ``tool execution frequently entails irreversible side
+effects'' --- the stated reason step-level verification matters more for agents than for
+mathematics --- yet no label marks reversibility.
+A formatting error and an irreversible deletion are both scored $-1$.
+A process reward model trained on these labels learns \emph{wrong}, never
+\emph{unrecoverable}, which is the distinction an agent would need in order to stop and ask.
+
+\section{The Reliability Condition}
+\label{sec:condition}
+
+\subsection{A bound and an ablation}
+
+\citet{yuan2026verifiableprocessrewardsagentic} give the clearest treatment because they
+can drive verifier error to zero by construction, using symbolic oracles in Tic-Tac-Toe,
+Sudoku, and Minesweeper.
+Their analysis bounds the policy-gradient bias by the verifier disagreement rate:
+$\lVert \hat{g} - g^{\star} \rVert \le G\ebar$, so ``oracle error propagates one-to-one
+into the gradient, with no horizon-dependent amplification.''
+
+The ablation matters more than the headline.
+Varying the number of Monte Carlo tree search simulations in the oracle yields
+Table~\ref{tab:oracle}.
+
+\begin{table*}[t]
+\centering
+\begin{tabular}{lcc}
+\toprule
+Oracle strength & In-domain return (1st / 2nd) & OOD average \\
+\midrule
+Base model (no training) & $-0.31 \pm 0.04$ / $-0.35 \pm 0.05$ & $60.92$ \\
+$N = 100$                & $-0.48 \pm 0.06$ / $-0.52 \pm 0.07$ & $58.47$ \\
+$N = 1000$               & $-0.13 \pm 0.04$ / $-0.15 \pm 0.04$ & $61.86$ \\
+$N = 10{,}000$ (default) & $-0.09 \pm 0.03$ / $-0.11 \pm 0.03$ & $62.17$ \\
+\bottomrule
+\end{tabular}
+\caption{Sensitivity of verifiable process rewards to oracle quality
+\citep{yuan2026verifiableprocessrewardsagentic}.
+In-domain return is on Tic-Tac-Toe (optimum $0$); the out-of-domain column is a
+seven-benchmark general-reasoning average.
+A weak oracle is worse than not training at all, on both axes.}
+\label{tab:oracle}
+\end{table*}
+
+The $N = 100$ row is the load-bearing result of this entire literature.
+Dense supervision from a weak verifier is not merely ineffective; it is net-harmful
+relative to leaving the pretrained policy alone, with degradation across every downstream
+benchmark.
+The authors' own summary: ``dense feedback alone is not sufficient: for process rewards to
+improve long-horizon reasoning, they must also be reliable and objectively grounded.''
+
+Two caveats bear on how far the bound has been tested: the default oracle runs $10{,}000$
+simulations per move against the rollout baseline's $100$ rollouts per state, so the
+comparison is not budget-matched; and the Sudoku verifier reads the unique solution grid,
+making that instantiation filtered imitation on labelled solutions rather than verification
+of task structure.
+
+\subsection{And in multi-agent settings it does not work}
+
+\citet{venkataramani2026masproveunderstandingprocessverification}, read at abstract depth,
+run the comparison at scale --- three verification paradigms, two granularities, five
+verifiers, four context-management strategies, six multi-agent frameworks --- and report
+that ``process-level verification does not consistently improve performance and frequently
+exhibits high variance, highlighting the difficulty of reliably evaluating partial
+multi-agent trajectories.''
+
+Their most consequential sentence receives one clause: ``a small performance gap between
+LLMs acting as judges and as single agents.''
+If a model is no better at judging a trajectory than at producing one, process verification
+reduces to an ensemble technique, and the premise beneath this research programme is weaker
+than it appears.
+
+\subsection{Synthesis}
+
+Taken together the picture is coherent and uncomfortable.
+Process supervision helps when the verifier is good, is harmful when the verifier is bad,
+has a theoretical account of the transition, and has no measurement of where any realistic
+verifier sits.
+The best hand-built verifier for a realistic domain reaches $\kappa \approx 0.6$
+\citep{rosset2026artbuildingverifierscomputer}; the harmful regime is demonstrated at
+$N=100$ \citep{yuan2026verifiableprocessrewardsagentic}; nothing connects the two scales.
+``Add process supervision'' is therefore a bet, not an improvement.
+
+\section{Repair Within the Trajectory}
+\label{sec:repair}
+
+\subsection{From restart to repair}
+
+For two years the literature offered exactly two responses to a derailed trajectory.
+ReAct exhibits the first --- continue and fail, with loop entrapment where ``the model
+repetitively generates the previous thoughts and actions'' and non-informative search at
+$23\%$ of error cases, made terminal by a hard step budget of $7$ steps on HotpotQA and $5$
+on FEVER \citep{yao2023reactsynergizingreasoningacting}.
+Reflexion institutionalised the second: abandon the episode and restart from a reset
+environment \citep{shinn2023reflexionlanguageagentsverbal}.
+
+\citet{yang2026selfcorrectinglonghorizonsearchagents} supply the missing third option.
+Their memory is a dependency tree in which ``a child is a search state derived from its
+ancestor's evidence'' --- explicitly not a search over candidate continuations.
+On a confirmed contradiction the system locates the node that introduced the refuted fact,
+replaces the fact and its source, regenerates that node's summary from corrected evidence,
+prunes all descendants, and resumes.
+This instantiates dependency-directed revision from truth-maintenance systems inside an
+agent loop.
+
+Their framing identifies precisely what verbal reflection cannot do: existing compression
+methods often ``replace erroneous facts without repairing downstream reasoning derived from
+them.''
+Fixing the belief is not fixing the trajectory.
+
+Across $2{,}149$ questions on four search benchmarks, judge accuracy improves from $30.1$
+for full-trajectory ReAct to $44.0$, a pooled gain of $13.9$ points and $8.3$--$25.6$ points
+per dataset.
+
+\subsection{Why that result is not yet attributable}
+
+The comparison isolating the repair mechanism is against a flat-memory control sharing the
+same summary budget, evidence budget, and conflict detector: $2.2$--$4.7$ points.
+But backtracking ``is triggered in $9.6$--$17.5\%$ of ReTree runs'', and on the rest the two
+systems should behave near-identically --- so the whole gap must sit in the minority that
+backtracked, requiring the repair to flip a fifth to a third of them.
+The paper never conditions accuracy on whether a backtrack fired, and uses a single seed with
+no confidence intervals.
+Stratifying already-collected data by that condition is the cheapest informative experiment
+we identify.
+
+Two further limits are worth recording.
+Peak per-step context for the full-trajectory baseline is $1{,}920$ characters, far below
+any context limit, so whatever the method fixes is not a context-capacity effect despite
+being motivated as one.
+And the provenance metric the architecture exists to deliver is citation precision of
+$44.5$: most cited passages do not entail the claim attached to them.
+
+\subsection{The compounding model that motivates repair is wrong}
+
+Repair mechanisms are designed against an intuition of independent per-step error
+compounding exponentially in horizon.
+The measurements do not support it.
+
+As reported by \citet{chen2026horizongapplanningmemory}, Vending-Bench --- on runs
+exceeding $20$M tokens --- finds not smooth decay but that ``capable models turn a profit
+in most runs, but every model has some runs that derail into a `meltdown' loop from which
+they rarely recover'', and critically that ``derailment shows no clear correlation with the
+context window filling up.''
+Their synthesis is that degradation is bimodal, ``(fine, or catastrophically derailed)
+whose trigger the field cannot yet reliably predict''.
+
+\citet{khanal2026pass1reliabilityscienceframework} reach a compatible conclusion from a
+different direction.
+Across $396$ tasks, four duration buckets, ten models, and $23{,}392$ episodes, aggregate
+$\mathrm{pass}@1$ falls from $76.3\%$ to $52.1\%$, a $24.3$-point decline that runs faster
+than an i.i.d. Bernoulli baseline: for one model the geometric prediction is
+$0.758^4 \approx 33.0\%$ against $22.2\%$ observed.
+The mechanism is positive inter-step error correlation, with the theoretical consequence
+that failure scales as $\Omega(\epsilon \cdot e^{\rho T})$, so ``Reducing $\rho$ \ldots is
+therefore a higher-priority training objective than reducing $\epsilon$ alone''.
+
+That is the strongest available argument for repair as a research direction, and it
+reframes the target: the quantity to attack is error \emph{persistence}, not error rate.
+It also implies that step budgets and context-compaction thresholds justified by
+exponential-decay reasoning are fitted to a curve the data rejects.
+
+\subsection{Self-correction may not improve with scale}
+
+A counter-intuitive result deserves recording, with the caveat that it reaches us
+second-hand and rests on three models.
+Decomposing self-correction into detection, localisation, and correction yields an
+``accuracy-correction paradox'': the weaker model ($66\%$ base accuracy) corrects its own
+errors intrinsically at $26.8\%$ while the strongest ($94\%$ base accuracy) manages
+$16.7\%$, and detection rate does not predict correction success
+\citep{chen2026horizongapplanningmemory}.
+The proposed Error Depth Hypothesis --- stronger models make fewer but structurally deeper
+errors that intrinsic correction cannot reach --- implies the long-standing negative result
+on unaided self-correction ``could get worse, not better, as models improve.''
+
+Consistent with this, \citet{yu2026trainingfreeinferencetimeselfreflectioncostbounded},
+at abstract depth, report a training-free generate--critique--revise loop that ``does not
+raise accuracy beyond the $95\%$ Wilson interval'', repositioning its contribution as cost
+control ($82$--$88\%$ of items stopped early at equal accuracy) --- and it is the cheap
+baseline trained methods rarely compare against.
+
+\section{Accumulation and Its Costs}
+\label{sec:accum}
+
+Accumulation operates across episodes where repair operates within one, on the premise that
+experience compounds into reusable skills, workflows, or memories.
+Three results indicate the premise is not free.
+
+\paragraph{Accumulated experience can be worse than none.}
+\citet{peng2026writeexecuterefineskill} open on the observation that ``agent-authored
+skills perform $8$--$11$ points worse than using no skill'', against expert-written skills
+that do help, concluding that following procedural guidance and improving it from execution
+evidence are distinct capabilities.
+Their remedy trains a skill optimiser outside a frozen executor with a programmatic verifier
+scoring repeated executions, gaining $+7.80$ and $+3.85$ points over no-skill on two
+benchmarks --- so on one it recovers a self-authoring deficit and adds under four points,
+and it needs a verifier its motivating case of novel software lacks.
+Architecturally it nonetheless answers an open question: Reflexion's retries occur at
+deployment, here they occur during optimiser training, so the deployed executor is
+single-pass --- the transfer from resettable environment to single-pass deployment that
+$\tau$-bench's setting demands.
+
+\paragraph{Capability and safety move on different axes.}
+\citet{li2026auditingselfevolutionfinancialagents} audit three published self-evolution
+methods in simulated e-banking, tracking regressions, attack-surface contact, unauthorized
+state change, and artifact compatibility rather than accuracy alone.
+For one method, benign utility rises from $0.741$ to $0.837$ while exposure to injected
+content rises from $0.820$ to $0.943$; conditional attack success after exposure
+\emph{falls} from $0.605$ to $0.562$ while overall attack success \emph{rises} from
+$0.496$ to $0.530$, with unauthorized financial state changes at $0.685$.
+
+The mechanism is exposure rather than vulnerability: the evolved agent is individually more
+robust per encounter and more successfully attacked overall, because it reaches more
+injected content.
+A paper reporting only conditional robustness would have shown a safety improvement from
+the same run.
+The general form, in the authors' words, is that ``post-evolution accuracy alone does not
+show whether learned behavior preserves previously correct behavior or security.''
+
+\paragraph{Memory scaffolds do not help at long horizons.}
+The adjacent intervention fails outright.
+\citet{khanal2026pass1reliabilityscienceframework} compare a reason-act loop against the
+same loop with an episodic scratchpad across ten models: six are hurt, four neutral within
+$\pm 0.03$, largest penalties $-0.14$ and $-0.13$, with the effect concentrated in models
+``capable enough to use the scratchpad but not capable enough to absorb its overhead
+efficiently.''
+This is in tension with the Reflexion lineage, where an episodic buffer is the mechanism
+carrying learning across trials; the settings differ --- between-episode lessons versus
+within-episode notes --- but the result should temper any default use of episodic memory as
+a reliability intervention.
+
+\section{A Cross-Cutting Pathology}
+\label{sec:pathology}
+
+No single paper in the corpus names the following, but four exhibit it, and we regard it as
+the review's most portable observation.
+
+\textbf{Agent interventions move the quantity being measured more reliably than the
+quantity being wanted.}
+
+\begin{itemize}
+\item \citet{fan2026screenshotstoolselicitingtool}: under a fixed harness, a dense tool-use
+      reward raises spreadsheet adoption from $0.03$ to $0.33$ and carries into greedy
+      decoding, but ``held-out accuracy does not follow. Behavior is steerable; competence
+      is not.''
+      The reward is entirely benign, making this structural rather than a reward-design
+      error.
+\item \citet{li2026auditingselfevolutionfinancialagents}: utility and unauthorized state
+      change rise together, and only the first is what the method was reported on.
+\item \citet{peng2026writeexecuterefineskill}: self-authored skills look like
+      self-improvement and score below no skill at all.
+\item \citet{wu2026clawtracktracelevelevaluationimprovement}, at abstract depth: outcome
+      scoring cannot separate reliable reasoning from ``lucky passes'', and identifies
+      \emph{result verification} as the systematic bottleneck among the process dimensions
+      it scores --- an agent that does not check its own results cannot detect the state a
+      repair would act on.
+\end{itemize}
+
+The same paper that produces the sharpest negative result also produces the corpus's
+cleanest positive one, and the contrast is instructive.
+Incentivising what the agent \emph{does} failed; changing what it \emph{observes} worked ---
+dropping the screenshot rendered redundant by a successful tool call and retraining under
+that rule reaches $37.8\%$ against $33.0\%$ at $53\%$ of the input cost
+\citep{fan2026screenshotstoolselicitingtool}.
+
+The same paper also demonstrates that the harness-versus-model question has no
+model-independent answer: under one identical harness on $309$ tasks, the same tool
+availability improves a reasoning model by $+4.0$ points and degrades a non-reasoning model
+by $-5.9$ points, both beyond two standard errors.
+And the reasoning model that benefits calls a tool on only $55$ of $309$ tasks, $23.9\%$ of
+the tool-reachable ones --- an adoption gap the authors attribute to the model having ``a
+cheaper route'' and never being trained to take it.
+
+\citet{chen2026horizongapplanningmemory} name the structural risk this implies but do not
+measure it: the process signals used to \emph{train} long-horizon agents and those used to
+\emph{evaluate} them ``rest on overlapping assumptions about what counts as progress on a
+partial trajectory'', and the disjoint-signal comparison that would test it is ``an
+experiment the corpus does not currently contain.''
+
+\section{Research Agenda}
+\label{sec:agenda}
+
+We list four experiments the reviewed corpus states or implies are missing, ordered by
+cost against expected value.
+Each is smaller than a paper.
+
+\paragraph{1. Measure verifier disagreement on a realistic agentic task, and locate the
+harmful threshold.}
+Both halves already exist:
+\citet{rosset2026artbuildingverifierscomputer} supply a strong verifier and human-labelled
+trajectories, and \citet{yuan2026verifiableprocessrewardsagentic} supply the bound
+$\lVert \hat{g} - g^{\star} \rVert \le G\ebar$ together with a demonstration of the harmful
+regime.
+Nothing joins them.
+Estimating $\ebar$ for obtainable verifiers, and finding where process supervision crosses
+from helpful to harmful, would convert this literature's central assumption into a measured
+quantity.
+
+\paragraph{2. For any dense agent reward, check whether competence followed behaviour.}
+\citet{fan2026screenshotstoolselicitingtool} is the only paper in the corpus that runs this
+check, and it fails.
+Re-running held-out evaluation across published process-reward methods is cheap and, on
+this evidence, likely to find several that move the proxy without moving the capability.
+
+\paragraph{3. Stratify repair results by whether repair fired.}
+\citet{yang2026selfcorrectinglonghorizonsearchagents} report that backtracking triggers in
+$9.6$--$17.5\%$ of runs and never separate those runs from the rest.
+The split requires no new experiments and determines whether dependency-directed revision
+does anything.
+
+\paragraph{4. Encode reversibility.}
+Irreversibility is the stated motivation for step-level verification and appears in no
+label schema, reward, or metric we reviewed.
+Adding a reversibility flag to the existing $8{,}509$ annotations of
+\citet{fan2026agentprocessbenchdiagnosingsteplevelprocess} requires no new trajectories.
+The stronger version --- a reward weighting errors by recoverability, and a benchmark that
+credits an agent for declining an irreversible action under uncertainty --- is closer to a
+thesis than a paper.
+
+Prior to most method work sits one attribution question.
+\citet{chen2026horizongapplanningmemory} call separating the model's own competence from the
+harness compensating for its absence among ``the field's most consequential open measurement
+problems'', with ``the corpus does not yet contain the controlled comparison that would answer
+it.''
+Since \citet{fan2026screenshotstoolselicitingtool} show the interaction term is significant,
+every single-model scaffold result here is uninterpretable as a claim about scaffolds.
+
+\section{Threats to Validity}
+\label{sec:threats}
+
+This review has the weaknesses of its construction, and they run in identifiable
+directions.
+
+\paragraph{Selection.}
+Relevance-ranked search weighted toward five previously identified weaknesses biases the
+corpus toward papers that diagnose problems over papers that quietly solve them, and
+under-represents engineering that does not frame itself as critique.
+Our conclusion that the field's dominant activity is measurement repair should be read with
+that in mind.
+
+\paragraph{Reading depth.}
+Eleven of eighteen papers were read at abstract depth (Table~\ref{tab:sources} records
+which).
+The failure modes visible only on close reading --- a calibrated threshold that turns out to
+be zero, a metric defined one way and computed another --- are exactly what abstract-depth
+reading misses; each of the seven full reads surfaced at least one, which suggests the
+eleven contain more.
+
+\paragraph{Secondary citation and recency.}
+Several of our most quotable figures pass through
+\citet{chen2026horizongapplanningmemory} rather than the primary source
+(\S\ref{sec:scope}); we mark but do not verify these.
+The corpus is almost entirely unrefereed 2026 preprints, effect sizes in preprints tend to
+shrink under review, and several results rest on a single seed or model.
+
+\section{Conclusion}
+
+The reviewed literature is best read as a field discovering that its instruments are the
+bottleneck.
+Agents improved at completing tasks faster than the means of establishing completion
+improved, and the response --- denser signal at the step and segment level --- is being
+pursued simultaneously in training and evaluation, from shared intuitions about what partial
+progress looks like.
+
+Three findings should survive.
+Outcome-only measurement overstates agent success by a large, uncalibrated margin through at
+least four distinct mechanisms.
+Dense process supervision is a bet on verifier quality with a known harmful regime and no
+measurement of where realistic verifiers fall.
+And interventions move the measured quantity considerably more reliably than the intended
+one, which makes the default protocol --- optimise a proxy, report the proxy --- unusually
+likely to mislead.
+The last is why the first two matter: a field that cannot yet tell whether an agent
+succeeded is one whose every reported improvement is provisional, including the improvements
+to how it measures.
+
+{\footnotesize
+\setlength{\bibsep}{2pt plus 1pt}
+\bibliographystyle{abbrvnat}
+\bibliography{../../refs}
+}
+
+\end{document}

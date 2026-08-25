@@ -1,8 +1,8 @@
 # The Reason-Act Loop
 
-> Sources: Yao et al., 2023-03-10
-> Raw: [ReAct](../../raw/agents/yao2023reactsynergizingreasoningacting.md)
-> Updated: 2026-08-20
+> Sources: Yao et al., 2023-03-10; Fan et al., 2026-08-04; Yang et al., 2026-08-11; Chen et al., 2026-08-07
+> Raw: [ReAct](../../raw/agents/yao2023reactsynergizingreasoningacting.md); [Screenshots or Tools](../../raw/agents/fan2026screenshotstoolselicitingtool.md); [ReTree](../../raw/agents/yang2026selfcorrectinglonghorizonsearchagents.md); [The Horizon Gap](../../raw/agents/chen2026horizongapplanningmemory.md)
+> Updated: 2026-08-24
 
 ## Overview
 
@@ -49,6 +49,18 @@ reported. The authors attribute it to greedy decoding but do not test the claim.
 error cases. The damage is not the bad retrieval itself but the absence of any
 backtracking mechanism to recover from it.
 
+> **Status: Outdated** (2026-08-24)
+> A backtracking mechanism now exists. ReTree (Yang et al., 2026) models search as
+> a dependency tree over evidence, and on a confirmed contradiction it returns to
+> the node that introduced the refuted fact, repairs it, regenerates that node's
+> summary, prunes dependent descendants and resumes — Doyle's truth-maintenance
+> principle inside the loop. Against Full-Trajectory ReAct on 2,149 questions it
+> improves judge accuracy by 8.3–25.6 points per dataset. Two reasons this does not
+> close the problem: the repair fires in only 9.6–17.5% of runs and the paper never
+> isolates its contribution, and the horizon tested is eight searches with peak
+> baseline context of 1,920 characters. See
+> [Trajectory Repair and Recovery](trajectory-repair.md).
+
 Both are made terminal by a hard step budget — 7 steps on HotpotQA, 5 on FEVER —
 combined with the finding that "more steps will not improve ReAct performance".
 An agent that has begun looping will exhaust its budget and fail. Additional
@@ -69,7 +81,64 @@ standard prompting. It only becomes the best method after finetuning on 3,000
 trajectories. Cheap-model agents therefore need supervised data, not just a
 prompt.
 
+## Expanding the action space does not settle the outcome
+
+ReAct's core move was to widen the action space with language. The 2026 version of
+that question — widen it with *tools* alongside screenshots — produces a result
+that should be read back onto the original.
+
+Under one identical harness on a 309-task computer-use benchmark, the same tool
+availability **improves a reasoning model by +4.0pp and degrades a non-reasoning
+model by −5.9pp** (5 runs each, both beyond 2 SE). Same action space, opposite
+sign, decided by the policy. The non-reasoning policy "ignores, misnames, or
+falsely terminates around tools."
+
+And the reasoning model that benefits still calls a tool on only 55 of 309 tasks —
+**23.9%** of the tool-reachable ones. The authors call this the *adoption gap* and
+diagnose both levels identically: "the model already has a cheaper route and is
+never trained to take it."
+
+This is the same shape as ReAct's own capability gating (below): an enriched action
+space is not a free capability, it is a capability the policy must be able to
+exploit. What is new is the demonstration that it can be actively harmful.
+
+The attempted fix is the more important result. A dense reward for tool use raised
+adoption from 0.03 to 0.33 and carried into greedy decoding — but "held-out
+accuracy does not follow. Behavior is steerable; competence is not." Reward shaping
+moved the measured behaviour and left the capability untouched, with an entirely
+benign reward. See
+[Process Supervision and Verification](process-supervision-and-verification.md).
+
+The one thing that did transfer was an observation-side change: dropping the
+screenshot made redundant by a successful tool call, then retraining under the same
+rule, reaches **37.8%** against **33.0%** for the uncompressed operating point at
+**53%** of the input cost. Managing what the loop *observes* paid off where
+incentivizing what it *does* did not.
+
+## Nobody is working on the loop itself
+
+A 1,547-paper survey of long-horizon agent work classifies its largest category,
+execution control, into orchestration (338 papers), recovery (245), and the
+single-agent control loop — **1 paper**.
+
+The survey reads this as ReAct's "near-total absorption into 'how agents just
+work'", which is a real possibility: the loop became infrastructure. The simpler
+explanation is that the survey's keyword filter does not select for papers about an
+agent's inner loop, and a subcategory of one cannot support a claim either way.
+
+Either way, the direction of effort is clear and worth noting against this article's
+two open failure modes: the field scaled *out* (more agents, more structure around
+them) rather than hardening any single loop's error correction. The survey's own
+assessment is that hardening "is where the harder unsolved problem sits."
+
+This is also the open question about where ReAct's value actually lives — in the
+model, or in the harness wrapped around it. See
+[Long-Horizon, Long-Context, Long-Term Memory](long-horizon-vocabulary.md).
+
 ## See Also
 
 - [Self-Reflection and Episodic Memory](self-reflection-and-memory.md)
+- [Trajectory Repair and Recovery](trajectory-repair.md)
+- [Process Supervision and Verification](process-supervision-and-verification.md)
+- [Long-Horizon, Long-Context, Long-Term Memory](long-horizon-vocabulary.md)
 - [Open Problems in Agentic Systems](open-problems.md)
